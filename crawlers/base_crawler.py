@@ -1,6 +1,9 @@
-import requests
 import time
+
+import requests
+
 from config.settings import TruyenYY
+
 
 class BaseCrawler:
     def __init__(self, domain):
@@ -11,15 +14,12 @@ class BaseCrawler:
             self.novel_url_form = TruyenYY.NOVEL_URL_FORM
             self.chapter_url_form = TruyenYY.CHAPTER_URL_FORM
             self.selectors = TruyenYY.SELECTORS
-        
+
         self.section = requests.Session()
-    
+
     def fetch(self, url):
         try:
-            response = self.section.get(
-                url,
-                timeout=self.request_timeout
-            )
+            response = self.section.get(url, timeout=self.request_timeout)
             response.raise_for_status()
             time.sleep(self.waiting_to_receive_response)
             return response.text
