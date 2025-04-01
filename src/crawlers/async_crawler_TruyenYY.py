@@ -4,7 +4,7 @@ from typing import Any, Dict
 
 from bs4 import BeautifulSoup
 
-from storage.local_storage import LocalStorage
+from src.storage.local_storage import LocalStorage
 
 from .async_base_crawler import AsyncBaseCrawler
 

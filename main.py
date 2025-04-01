@@ -1,14 +1,14 @@
 import asyncio
 import time
 
-from config.settings import TruyenYY
-from crawlers.async_crawler_TruyenYY import async_crawler_TruyenYY
+from src.config.settings import TruyenYY
+from src.crawlers.async_crawler_TruyenYY import async_crawler_TruyenYY
 
 
 async def main():
     novel_url = "https://truyenyy.xyz/truyen/yeu-long-co-de"
     novel_url = "https://truyenyy.xyz/truyen/luc-dia-kien-tien"
-    novel_url = "https://truyenyy.xyz/truyen/nhan-ngu-tieu-nam"
+    novel_url = "https://truyenyy.xyz/truyen/yeu-ho-tieu-bach"
 
     async with async_crawler_TruyenYY(TruyenYY) as async_crawler:
         login_success = await async_crawler.login()
