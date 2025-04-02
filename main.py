@@ -6,13 +6,11 @@ from src.crawlers.async_crawler_TruyenYY import async_crawler_TruyenYY
 
 
 async def main():
-    novel_url = "https://truyenyy.xyz/truyen/yeu-long-co-de"
-    novel_url = "https://truyenyy.xyz/truyen/luc-dia-kien-tien"
-    novel_url = "https://truyenyy.xyz/truyen/yeu-ho-tieu-bach"
+    novel_url = "https://truyenyy.xyz/truyen/thon-thien-chua-te"
 
     async with async_crawler_TruyenYY(TruyenYY) as async_crawler:
-        login_success = await async_crawler.login()
-        if login_success:
+        # login_success = await async_crawler.login()
+        if True:
             await async_crawler.update_info(novel_url)
             await asyncio.sleep(1)
             await async_crawler.crawl_chapters(novel_url)

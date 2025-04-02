@@ -107,3 +107,6 @@ data/
 # Logs
 *.log
 logs/
+
+# .html file for debugging
+*.html

@@ -1,24 +1,30 @@
 import asyncio
 from typing import Any, Dict, Optional
-
+from fake_useragent import UserAgent
+from src.config.logger import logger
 import aiohttp
 
 
 class AsyncBaseCrawler:
     def __init__(self, config):
+        self.logger = logger(self.__class__.__name__)
+        self.ua = UserAgent()
         self.session: Optional[aiohttp.ClientSession] = None
         self.headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            "User-Agent": self.ua.random
         }
         self.is_logged_in = False
         self.DEFINE = config
+        self.logger.info("AsyncBaseCrawler initialized.")
 
     async def __aenter__(self):
         await self.create_session()
+        self.logger.info("Session created.")
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
         await self.close_session()
+        self.logger.info("Session closed.")
 
     async def create_session(self):
         if not self.session or self.session.closed:
@@ -26,10 +32,12 @@ class AsyncBaseCrawler:
                 headers=self.headers,
                 # timeout=aiohttp.ClientTimeout(total=self.request_timeout)
             )
+            self.logger.info("HTTP session created with headers: %s", self.headers)
 
     async def close_session(self):
         if self.session and not self.session.closed:
             await self.session.close()
+            self.logger.info("HTTP session closed.")
 
     async def login(self) -> bool:
         if not self.session:
@@ -47,10 +55,10 @@ class AsyncBaseCrawler:
             ) as response:
                 if response.status == 200:
                     self.is_logged_in = True
-                    print("Login successfull")
+                    self.logger.info("Login successfull")
                     return True
                 else:
-                    print(f"Login failed with status {response.status}")
+                    self.logger.info(f"Login failed with status {response.status}")
         except aiohttp.ClientError as e:
             print(f"Login request failed: {str(e)}")
             return False
@@ -62,6 +70,7 @@ class AsyncBaseCrawler:
             async with self.session.get(url, **kwargs) as response:
                 await asyncio.sleep(self.DEFINE.WAITING_TO_RECEIVE_RESPONSE)
                 content = await response.text()
+                # self.logger.info(f"Successfull -> {url}")
                 return {
                     "url": url,
                     "content": content,
@@ -69,7 +78,7 @@ class AsyncBaseCrawler:
                     "headers": dict(response.headers),
                 }
         except aiohttp.ClientError as e:
-            print(f"Request to {url} failed: {str(e)}")
+            self.logger.info(f"Failed -> {url}")
             return {"url": url, "content": None, "status": 500, "error": str(e)}
 
     async def fetch_multiple(self, urls: list) -> list:

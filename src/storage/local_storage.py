@@ -9,7 +9,7 @@ class LocalStorage:
 
     def save_json(self, data, filename):
         path = os.path.join(self.base_path, f"{filename}")
-        print(f"Save file -> {path}")
+        # print(f"Save file -> {path}")
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False)
 

@@ -1,5 +1,5 @@
 import os
-import re
+import re, asyncio
 from typing import Any, Dict
 
 from bs4 import BeautifulSoup
@@ -15,6 +15,9 @@ class async_crawler_TruyenYY(AsyncBaseCrawler):
         if result["status"] != 200:
             return False
         soup = BeautifulSoup(result["content"], "html.parser")
+        # Save the HTML content of the page for debugging purposes
+        # with open("soup.html", "w", encoding="utf-8") as file:
+        #     file.write(soup.prettify())
         info = {
             "url": url,
             "title": "",
@@ -116,22 +119,18 @@ class async_crawler_TruyenYY(AsyncBaseCrawler):
         local_storage = LocalStorage(novel_folder)
         data = local_storage.load_novel_info()
         if data is None:
-            return
-        if is_retry:
-            urls = [
-                f"{self.DEFINE.BASE_URL}/truyen/{slug}/chuong-{index}.html"
-                for index, chapter in data["chapters"].items()
-                if chapter["status"] == "to_download" and chapter["re_download"] < 3
-            ]
-            print(f"Number chapter need re-download: {len(urls)}")
-        else:
-            urls = [
-                f"{self.DEFINE.BASE_URL}/truyen/{slug}/chuong-{index}.html"
-                for index, chapter in data["chapters"].items()
-                if chapter["status"] == "to_download"
-            ]
-            print(f"Number chapter need download: {len(urls)}")
-
+            return [-1, -1]
+        
+        urls = [
+            f"{self.DEFINE.BASE_URL}/truyen/{slug}/chuong-{index}.html"
+            for index, chapter in data["chapters"].items()
+            if chapter["status"] == "to_download"
+        ]
+        self.logger.info(f"Number chapter need download: {len(urls)}")
+        print("Crawling . . . ")
+        print(f"Number chapter need download: {len(urls)}")
+        fetch_successful = 0
+        fetch_failed = 0
         results = await self.fetch_multiple(urls)
         for result in results:
             if result["status"] == 200:
@@ -140,24 +139,29 @@ class async_crawler_TruyenYY(AsyncBaseCrawler):
                 match = re.search(url_pattern, result["url"])
                 slug = match.group("slug")
                 index = str(match.group("index"))
-                title = ""
-                content = ""
-                try:
-                    title = soup.select_one(self.DEFINE.SELECTORS["chapter_title"])
-                    title = title.text.strip() if title else ""
-                    content = soup.select_one(
-                        self.DEFINE.SELECTORS["chapter_content"]
-                    ).text.strip()
-                except:
-                    print(f"fetch chapter error -> {result['url']}")
+                
+                title = soup.select_one(self.DEFINE.SELECTORS["chapter_title"])
+                title = title.text.strip() if title else ""
+
+                content = soup.select_one(self.DEFINE.SELECTORS["chapter_content"])
+                content = content.text.strip() if content else ""
 
                 if content != "":
                     data["chapters"][index]["title"] = title
                     data["chapters"][index]["status"] = "downloaded"
                     local_storage.save_chapter(content, index)
+                    fetch_successful += 1
                 else:
+                    fetch_failed += 1
                     data["chapters"][index]["re_download"] = (
                         data["chapters"][index]["re_download"] + 1
                     )
 
         local_storage.save_novel_info(data)
+        self.logger.info(f"Number chapter downloaded successful: {fetch_successful}")
+        self.logger.info(f"Number chapter download failed: {fetch_failed}")
+        print("Finish fetch data for -> {url}")
+        print(f"Number chapter download successful: {fetch_successful}")
+        print(f"Number chapter download failed: {fetch_failed}")
+
+        return [fetch_successful, fetch_failed]
