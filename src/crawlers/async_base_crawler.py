@@ -73,5 +73,11 @@ class AsyncBaseCrawler:
             return {"url": url, "content": None, "status": 500, "error": str(e)}
 
     async def fetch_multiple(self, urls: list) -> list:
-        tasks = [self.fetch(url) for url in urls]
+        semaphore = asyncio.Semaphore(self.DEFINE.NUMBER_URL_A_REQUEST_BATCH)
+
+        async def limited_fetch(url):
+            async with semaphore:
+                return await self.fetch(url)
+        
+        tasks = [limited_fetch(url) for url in urls]
         return await asyncio.gather(*tasks, return_exceptions=True)

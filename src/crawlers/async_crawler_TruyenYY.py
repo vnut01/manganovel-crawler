@@ -132,35 +132,32 @@ class async_crawler_TruyenYY(AsyncBaseCrawler):
             ]
             print(f"Number chapter need download: {len(urls)}")
 
-        while urls:
-            batch = urls[: self.DEFINE.NUMBER_URL_A_REQUEST_BATCH]
-            urls = urls[self.DEFINE.NUMBER_URL_A_REQUEST_BATCH :]
-            results = await self.fetch_multiple(batch)
-            for result in results:
-                if result["status"] == 200:
-                    soup = BeautifulSoup(result["content"], "html.parser")
-                    url_pattern = r"/truyen/(?P<slug>[^/]+)/chuong-(?P<index>\d+)\.html"
-                    match = re.search(url_pattern, result["url"])
-                    slug = match.group("slug")
-                    index = str(match.group("index"))
-                    title = ""
-                    content = ""
-                    try:
-                        title = soup.select_one(self.DEFINE.SELECTORS["chapter_title"])
-                        title = title.text.strip() if title else ""
-                        content = soup.select_one(
-                            self.DEFINE.SELECTORS["chapter_content"]
-                        ).text.strip()
-                    except:
-                        print(f"fetch chapter error -> {result['url']}")
+        results = await self.fetch_multiple(urls)
+        for result in results:
+            if result["status"] == 200:
+                soup = BeautifulSoup(result["content"], "html.parser")
+                url_pattern = r"/truyen/(?P<slug>[^/]+)/chuong-(?P<index>\d+)\.html"
+                match = re.search(url_pattern, result["url"])
+                slug = match.group("slug")
+                index = str(match.group("index"))
+                title = ""
+                content = ""
+                try:
+                    title = soup.select_one(self.DEFINE.SELECTORS["chapter_title"])
+                    title = title.text.strip() if title else ""
+                    content = soup.select_one(
+                        self.DEFINE.SELECTORS["chapter_content"]
+                    ).text.strip()
+                except:
+                    print(f"fetch chapter error -> {result['url']}")
 
-                    if content != "":
-                        data["chapters"][index]["title"] = title
-                        data["chapters"][index]["status"] = "downloaded"
-                        local_storage.save_chapter(content, index)
-                    else:
-                        data["chapters"][index]["re_download"] = (
-                            data["chapters"][index]["re_download"] + 1
-                        )
+                if content != "":
+                    data["chapters"][index]["title"] = title
+                    data["chapters"][index]["status"] = "downloaded"
+                    local_storage.save_chapter(content, index)
+                else:
+                    data["chapters"][index]["re_download"] = (
+                        data["chapters"][index]["re_download"] + 1
+                    )
 
         local_storage.save_novel_info(data)
