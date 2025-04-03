@@ -28,7 +28,7 @@ class LocalStorage:
         return self.load_json("info.json")
 
     def save_chapter(self, data, index: str):
-        self.save_json(data, f"Chapter-{index}.json")
+        self.save_json(data, f"chuong-{index}.json")
 
     def load_chapter(self, index: str):
-        return self.load_json(f"Chapter-{index}.json")
+        return self.load_json(f"chuong-{index}.json")

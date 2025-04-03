@@ -1,47 +1,40 @@
 import os
-import re, asyncio
-from typing import Any, Dict
+import re
+import asyncio
+from typing import Any, Dict, List
 
 from bs4 import BeautifulSoup
-
 from src.storage.local_storage import LocalStorage
-
 from .async_base_crawler import AsyncBaseCrawler
 import json
 
 
 class async_crawler_MeTruyenCV(AsyncBaseCrawler):
     async def update_info(self, url: str) -> bool:
+        """Fetch and update novel metadata."""
         slug = url.split("/")[-1]
         novel_folder = os.path.join(self.DEFINE.DATA_PATH, slug)
         local_storage = LocalStorage(novel_folder)
-        data = local_storage.load_novel_info()
-        if data:
-            book_id = data["info"]["id"]
-            # Update Chapters List
-            chapters_list = await self.fetch_list_chapters(book_id)
-            for i in range(len(data["chapters"]), len(chapters_list)):
-                data["chapters"].append(chapters_list[i])
-            data["info"]["last_chapter_url_index"] = chapters_list[-1]["url_index"]
-            print("Update chapters list")
-            local_storage.save_novel_info(data)
-            return True
 
         result = await self.fetch(url)
         if result["status"] != 200:
             return False
+
         soup = BeautifulSoup(result["content"], "html.parser")
+
         # Save the HTML content of the page for debugging purposes
         with open("soup.html", "w", encoding="utf-8") as file:
             file.write(soup.prettify())
 
         # Extract the <script> tag containing `window.bookData`
         script_tag = soup.find("script", text=lambda t: t and "window.bookData" in t)
-        if script_tag:
-            # Extract the content of the script tag
-            match = re.search(r'"id":(\d+)', script_tag.string)
-            book_id = int(match.group(1)) if match else None
-            chapters_list = await self.fetch_list_chapters(book_id)
+        if not script_tag:
+            self.logger.error("Failed to find the script tag containing book data.")
+            return False
+
+        # Extract the content of the script tag
+        match = re.search(r'"id":(\d+)', script_tag.string)
+        book_id = int(match.group(1)) if match else None
 
         info = {
             "url": url,
@@ -58,6 +51,7 @@ class async_crawler_MeTruyenCV(AsyncBaseCrawler):
             "tags": [],
         }
 
+        # Extract metadata using selectors
         if self.DEFINE.SELECTORS["title"]:
             info["title"] = soup.select_one(self.DEFINE.SELECTORS["title"]).text.strip()
         if self.DEFINE.SELECTORS["other_name"]:
@@ -89,29 +83,79 @@ class async_crawler_MeTruyenCV(AsyncBaseCrawler):
         if self.DEFINE.SELECTORS["tags"] != "":
             info["tags"] = soup.select_one(self.DEFINE.SELECTORS["tags"]).text.strip()
 
+        # Save novel info
+        data = local_storage.load_novel_info()
         if data is None:
-            data = {}
-            data["info"] = info
-            data["chapters"] = chapters_list
+            data = {"info": info, "chapters": []}
         else:
-            data["info"]["title"] = info["title"]
-            data["info"]["other_name"] = info["other_name"]
-            data["info"]["cover_image"] = info["cover_image"]
-            data["info"]["author"] = info["author"]
-            data["info"]["translator"] = info["translator"]
-            data["info"]["status"] = info["status"]
-            data["info"]["types"] = info["types"]
-            data["info"]["description"] = info["description"]
-            data["info"]["last_chapter_url_index"] = info["last_chapter_url_index"]
-            data["info"]["tags"] = info["tags"]
-            # append new chapters to the existing list
-            for i in range(len(data["chapters"]), len(chapters_list)):
-                data["chapters"].append(chapters_list[i])
+            data["info"].update(info)
 
         local_storage.save_novel_info(data)
         return True
 
-    async def crawl_chapters(self, url: str, is_retry=False):
+    async def update_chapter_list(self, url: str) -> bool:
+        """Fetch and update the list of chapters."""
+        slug = url.split("/")[-1]
+        novel_folder = os.path.join(self.DEFINE.DATA_PATH, slug)
+        local_storage = LocalStorage(novel_folder)
+        data = local_storage.load_novel_info()
+
+        if not data or "info" not in data or "id" not in data["info"]:
+            self.logger.error("Novel info is missing. Please run update_info first.")
+            return False
+
+        book_id = data["info"]["id"]
+
+        # Fetch the list of chapters
+        chapters_list = await self.fetch_list_chapters(book_id)
+        if not chapters_list:
+            self.logger.error("Failed to fetch chapters list.")
+            return False
+
+        # Update chapters list
+        for i in range(len(data["chapters"]), len(chapters_list)):
+            data["chapters"].append(chapters_list[i])
+        data["info"]["last_chapter_url_index"] = chapters_list[-1]["url_index"]
+
+        print("Update chapters list")
+        local_storage.save_novel_info(data)
+        return True
+
+    async def fetch_list_chapters(self, book_id) -> list:
+        """Fetch the list of chapters for a given book ID."""
+        if not self.session:
+            await self.create_session()
+        url = f"https://backend.metruyencv.com/api/chapters?filter[book_id]={book_id}&filter[type]=published"
+        try:
+            async with self.session.get(url) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    
+                    data = [
+                        {
+                            "url_index": int(chapter["index"]),
+                            "name": chapter["name"],
+                            "status": "to_download",
+                            "re_download": 0,
+                        }
+                        for chapter in data["data"]
+                    ]
+                    chapters_list = [{} for i in range(0, data[-1]["url_index"])]
+                    for chapter in data:
+                        chapters_list[chapter["url_index"] - 1] = chapter
+
+                    return chapters_list
+                else:
+                    self.logger.info(
+                        f"Failed to fetch chapters with status {response.status}."
+                    )
+                    return []
+        except :
+            self.logger.error("Failed to fetch chapters")
+            return []
+
+    async def crawl_chapters(self, url: str, is_retry=False) -> List[int]:
+        """Crawl and download chapters."""
         slug = url.split("/")[-1]
         novel_folder = os.path.join(self.DEFINE.DATA_PATH, slug)
         local_storage = LocalStorage(novel_folder)
@@ -126,14 +170,10 @@ class async_crawler_MeTruyenCV(AsyncBaseCrawler):
                     f"{self.DEFINE.BASE_URL}/truyen/{slug}/chuong-{chapter['url_index']}.html"
                 )
 
-        # urls = [
-        #     f"{self.DEFINE.BASE_URL}/truyen/{slug}/chuong-{index}.html"
-        #     for index, chapter in data["chapters"]
-        #     if chapter and chapter["status"] == "to_download"
-        # ]
-        self.logger.info(f"Number chapter need download: {len(urls)}")
+        self.logger.info(f"Number of chapters to download: {len(urls)}")
         print("Crawling . . . ")
-        print(f"Number chapter need download: {len(urls)}")
+        print(f"Number of chapters to download: {len(urls)}")
+
         fetch_successful = 0
         fetch_failed = 0
         results = await self.fetch_multiple(urls)
@@ -142,31 +182,23 @@ class async_crawler_MeTruyenCV(AsyncBaseCrawler):
                 soup = BeautifulSoup(result["content"], "html.parser")
                 url_pattern = r"/truyen/(?P<slug>[^/]+)/chuong-(?P<index>\d+)\.html"
                 match = re.search(url_pattern, result["url"])
-                # slug = match.group("slug")
                 url_index = int(match.group("index"))
-
-                # title = soup.select_one(self.DEFINE.SELECTORS["chapter_title"])
-                # title = title.text.strip() if title else ""
 
                 content = soup.select_one(self.DEFINE.SELECTORS["chapter_content"])
                 content = content.decode_contents() if content else ""
 
                 if content != "":
-                    # data["chapters"][index]["title"] = title
                     data["chapters"][url_index - 1]["status"] = "downloaded"
                     local_storage.save_chapter(content, url_index)
                     fetch_successful += 1
                 else:
                     fetch_failed += 1
-                    data["chapters"][url_index - 1]["re_download"] = (
-                        data["chapters"][url_index - 1]["re_download"] + 1
-                    )
+                    data["chapters"][url_index - 1]["re_download"] += 1
 
         local_storage.save_novel_info(data)
-        self.logger.info(f"Number chapter downloaded successful: {fetch_successful}")
-        self.logger.info(f"Number chapter download failed: {fetch_failed}")
-        print("Finish fetch data for -> {url}")
-        print(f"Number chapter download successful: {fetch_successful}")
-        print(f"Number chapter download failed: {fetch_failed}")
+        self.logger.info(f"Number of chapters downloaded successfully: {fetch_successful}")
+        self.logger.info(f"Number of chapters failed to download: {fetch_failed}")
+        print(f"Number of chapters downloaded successfully: {fetch_successful}")
+        print(f"Number of chapters failed to download: {fetch_failed}")
 
         return [fetch_successful, fetch_failed]

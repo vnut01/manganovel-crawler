@@ -72,42 +72,6 @@ class AsyncBaseCrawler:
             self.logger.error(f"Login request failed: {str(e)}")
             return False
 
-    async def fetch_list_chapters(self, book_id) -> list:
-        """Fetch the list of chapters for a given book ID."""
-        if not self.session:
-            await self.create_session()
-        url = f"https://backend.metruyencv.com/api/chapters?filter%5Bbook_id%5D={book_id}&filter%5Btype%5D=published"
-        try:
-            async with self.session.get(url) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    data = [
-                        {
-                            "url_index": int(chapter["index"]),
-                            "name": chapter["name"],
-                            "status": "to_download",
-                            "re_download": 0,
-                        }
-                        for chapter in data["data"]
-                    ]
-                    # print(len(data))
-                    # with open("data.json", "w", encoding="utf-8") as f:
-                    #     json.dump(data, f, ensure_ascii=False, indent=4)
-                    chapters_list = [{} for i in range(0, data[-1]["url_index"])]
-                    # print(len(chapters_list))
-                    for chapter in data:
-                        chapters_list[chapter["url_index"] - 1] = chapter
-
-                    return chapters_list
-                else:
-                    self.logger.info(
-                        f"Failed to fetch chapters with status {response.status}."
-                    )
-                    return []
-        except aiohttp.ClientError as e:
-            self.logger.error(f"Failed to fetch chapters: {str(e)}")
-            return []
-
     async def fetch(self, url: str, **kwargs) -> Dict[str, Any]:
         if not self.session:
             await self.create_session()

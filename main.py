@@ -8,25 +8,23 @@ from src.crawlers.async_crawler_MeTruyenCV import async_crawler_MeTruyenCV
 
 async def main():
 
-    novel_url = "https://metruyencv.com/truyen/cac-nguoi-tu-tien-ta-lam-ruong"
+    url = "https://metruyencv.com/truyen/bay-nat-lien-vo-dich-xuat-sinh-giay-tien-de"
     async with async_crawler_MeTruyenCV(MeTruyenCV) as async_crawler:
         login_success = await async_crawler.login()
         if login_success:
-            await async_crawler.update_info(novel_url)
-            await asyncio.sleep(1)
-            await async_crawler.crawl_chapters(novel_url)
+            # Update novel info
+            if await async_crawler.update_info(url):
+                print("Novel info updated successfully!")
+
+            # Update chapter list
+            if await async_crawler.update_chapter_list(url):
+                print("Chapter list updated successfully!")
+
+            # Crawl and download chapters
+            results = await async_crawler.crawl_chapters(url)
+            print(f"Chapters downloaded: {results[0]}, Failed: {results[1]}")
         else:
             print("Login failed!!!!!!!!!!")
-
-    # novel_url = "https://truyenyy.xyz/truyen/thon-thien-chua-te"
-    # async with async_crawler_TruyenYY(TruyenYY) as async_crawler:
-    #     # login_success = await async_crawler.login()
-    #     if True:
-    #         await async_crawler.update_info(novel_url)
-    #         await asyncio.sleep(1)
-    #         await async_crawler.crawl_chapters(novel_url)
-    #     else:
-    #         print("Login failed!!!!!!!!!!")
 
 
 if __name__ == "__main__":
